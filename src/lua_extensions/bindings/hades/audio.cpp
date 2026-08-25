@@ -151,6 +151,8 @@ namespace lua::hades::audio
 
 	// Lua API: Table
 	// Name: audio
+	// Audio helpers. Reaches FMOD Studio directly rather than going through the
+	// engine's own wrapper, so it uses FMOD's documented public API.
 	void bind(sol::table& state)
 	{
 		auto ns = state.create_named("audio");

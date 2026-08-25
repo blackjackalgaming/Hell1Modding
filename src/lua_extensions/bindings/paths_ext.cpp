@@ -35,7 +35,8 @@ namespace lua::paths_ext
 	// Lua API: Function
 	// Table: paths
 	// Name: Content
-	// Returns: string: Returns the GameFolder/Content folder path
+	// The game's Content folder, which holds Scripts, Game, Maps, Audio and so on.
+	// Returns: string: absolute path to <game>/Content
 	static std::string hades_Content()
 	{
 		auto folder  = get_game_executable_folder().parent_path();
@@ -47,8 +48,10 @@ namespace lua::paths_ext
 	// Lua API: Function
 	// Table: paths
 	// Name: Ship
-	// Returns: string: the folder the executable lives in - <game>/x64 on
-	// Hades 1. There is no "Ship" folder in Hades 1; see the note at the top.
+	// The folder the executable lives in. Note Hades 1 has no folder actually
+	// named "Ship" - the layout is Content/, x64/, x64Vk/, x86/ - so this
+	// returns x64/. The name is kept for parity with Hades II.
+	// Returns: string: absolute path to <game>/x64
 	static std::string hades_Ship()
 	{
 		return (char*)get_game_executable_folder().u8string().c_str();

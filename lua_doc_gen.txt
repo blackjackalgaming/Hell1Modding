@@ -1,5 +1,36 @@
-python ".\out\build\x64-Debug\_deps\rom-src\docs\lua_docs_generator\doc_gen.py" ".\out\build\x64-Debug\_deps\rom-src\src" ".\src\" ".\docs\lua"
+Regenerating docs/lua from the "// Lua API:" comments in the C++ sources.
 
-python ".\out\build\x64-Release-FastCompile\_deps\rom-src\docs\lua_docs_generator\doc_gen.py" ".\out\build\x64-Release-FastCompile\_deps\rom-src\src" ".\src\" ".\docs\lua"
+The generator ships with ReturnOfModdingBase and lands in the build tree when
+CMake fetches it. It reads both RoMBase's src and ours, so the output covers
+the whole API a mod sees, not just our additions.
 
-python ".\out\build\x64-Release-FINAL\_deps\rom-src\docs\lua_docs_generator\doc_gen.py" ".\out\build\x64-Release-FINAL\_deps\rom-src\src" ".\src\" ".\docs\lua"
+    python build/_deps/rom-src/docs/lua_docs_generator/doc_gen.py ^
+           build/_deps/rom-src/src ^
+           src ^
+           docs/lua
+
+(Hell2Modding's original invocation pointed at out/build/x64-Debug/... - that
+is their CMake preset layout, not ours. We configure into build/.)
+
+Python is not on PATH on the dev machine; it lives at
+C:\Users\Owner\AppData\Local\Programs\Python\Python314\python.exe
+
+Comment format, which the parser is strict about:
+
+    // Lua API: Table
+    // Name: audio                  <- must be "Name", not "Table"
+    // Free-text description, any number of lines.
+
+    // Lua API: Function
+    // Table: audio                 <- which table it belongs to
+    // Name: load_bank
+    // Description lines go here, before Param/Returns.
+    // Param: file_path: string: what it is
+    // Returns: bool: what it means
+
+Two things that will bite:
+
+- After "Lua API: Table" the next tag must be "Name:". Using "Table:" there
+  crashes the generator with an AttributeError on NoneType.
+- "Param:" and "Returns:" must each fit on one line. A wrapped continuation is
+  parsed as a description and shows up above the entry, mangled.

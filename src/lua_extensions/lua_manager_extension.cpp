@@ -59,14 +59,19 @@ namespace big::lua_manager_extension
 	void init_lua_api(sol::state_view& state, sol::table& lua_ext)
 	{
 		// Lua API: Table
-		// Table: on_import
-		// Callbacks fired around each script the game imports from
-		// Content/Scripts. Required by ModUtil 4.0.1.
+		// Name: on_import
+		// Callbacks fired around each script the game imports from the game's
+		// Content/Scripts folder. Required by ModUtil 4.0.1.
 		auto on_import_table = lua_ext.create_named("on_import");
 
-		// Param: function(string file_name, current_ENV) -> nil or _ENV
-		// Called before the game loads a script. Returning an _ENV installs it
-		// for that script.
+		// Lua API: Function
+		// Table: on_import
+		// Name: pre
+		// Param: callback: function: signature (string script_name, current_ENV) returning nil or an _ENV
+		// Called before the game loads a script from Content/Scripts. Returning a
+		// table installs it as that script's _ENV, which is how ModUtil injects
+		// itself. Chain to rom.game via __index/__newindex or the script's globals
+		// will not reach the game.
 		on_import_table.set_function("pre",
 		                             [](sol::protected_function f, sol::this_environment env)
 		                             {
@@ -76,8 +81,12 @@ namespace big::lua_manager_extension
 			                             }
 		                             });
 
-		// Param: function(string file_name)
-		// Called after the game has loaded a script.
+		// Lua API: Function
+		// Table: on_import
+		// Name: post
+		// Param: callback: function: signature (string script_name)
+		// Called after the game has loaded a script from Content/Scripts. Note the
+		// game loads its scripts twice at startup, so this fires once per wave.
 		on_import_table.set_function("post",
 		                             [](sol::protected_function f, sol::this_environment env)
 		                             {
