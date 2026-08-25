@@ -11,14 +11,13 @@ set(SRC_DIR "${PROJECT_SOURCE_DIR}/src")
 # Modules
 #
 # Dropped from Hell2Modding's list, and why:
-#   lovely      - patches Lua source text at load time. Hades 1 doesn't need it:
-#                 ScriptManager::Load takes a path and does the whole job.
-#   lpeg        - Lua parsing library, pulled in for lovely.
-#   luasocket   - networking from Lua. Not needed to start.
-#   tolk        - screen reader / accessibility. Not needed to start.
-#   capstone    - disassembler. safetyhook brings Zydis; add back if something wants it.
-#   git.cmake   - stamps a version from git tags. Needs a template file and a
-#                 tagged repo; add it once the build works.
+#   lovely      - patches the text of the game's own Lua scripts before they
+#                 compile. 6 of 78 mods in a real profile ship lovely patches,
+#                 so this probably does need to come back - but it drags in a
+#                 Rust toolchain, so it is its own piece of work.
+#   tolk        - screen reader / accessibility. 0 of 78 mods use it.
+#   capstone    - disassembler, used only for Hades-2-specific instruction
+#                 rewriting we do not do. Genuinely not needed.
 #
 # Kept:
 #   eastl       - Hades 1's engine uses EASTL throughout. Needed to build the
@@ -28,9 +27,20 @@ set(SRC_DIR "${PROJECT_SOURCE_DIR}/src")
 #                 resolves addresses by name instead of hardcoding RVAs.
 #   safetyhook  - function hooking (their choice over MinHook/PolyHook).
 #   rom         - ReturnOfModdingBase itself.
+#   git.cmake   - stamps GIT_SHA1 etc into version.cpp, and version.hpp holds
+#                 VERSION_NUMBER, which the nightly CI seds. Needed to publish.
+#   lpeg        - Lua pattern library, exposed to mods via require("lpeg").
+#                 SGG_Modding-SJSON hard-requires it and 50 of 78 mods in a
+#                 real profile depend on SJSON, so this is not optional.
+#   luasocket   - socket/mime/http/ltn12 for mods. No mod in a 78-mod profile
+#                 uses it today; added for API parity so a mod written against
+#                 Hell2Modding does not hit a missing library.
 # ---------------------------------------------------------------------------
 message(STATUS "\nFetching modules")
+include(cmake_scripts/git.cmake)
 include(cmake_scripts/eastl.cmake)
+include(cmake_scripts/lpeg.cmake)
+include(cmake_scripts/luasocket.cmake)
 include(cmake_scripts/raw_pdb.cmake)
 include(cmake_scripts/rom.cmake)
 include(cmake_scripts/safetyhook.cmake)
@@ -85,6 +95,8 @@ target_link_libraries(Hell1Modding
         dxgi            # swapchain - needed by both D3D11 and D3D12
         dxguid
         EASTL
+        lpeg_static
+        luasocket_static
         raw_pdb
         safetyhook
         Zydis::Zydis

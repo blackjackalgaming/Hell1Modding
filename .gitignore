@@ -3,3 +3,4 @@ build/
 out/
 *.user
 build.log
+.code-workspace

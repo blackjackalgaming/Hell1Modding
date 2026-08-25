@@ -134,4 +134,9 @@ namespace big
 
         setupFunctions();
     }
+
+    void* dll_proxy::original_module()
+    {
+        return D3D11.dll;
+    }
 } // namespace big
