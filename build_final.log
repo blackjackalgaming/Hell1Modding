@@ -1,0 +1,87 @@
+MSBuild version 18.9.1+a81b43525 for .NET Framework
+
+  Checking File Globs
+  1>Checking Build System
+  Building Custom Rule C:/Dev/hades/hades-loader/Hell1Modding/CMakeLists.txt
+     Compiling proc-macro2 v1.0.101
+     Compiling quote v1.0.41
+     Compiling unicode-ident v1.0.19
+     Compiling serde_core v1.0.228
+     Compiling windows_x86_64_msvc v0.52.6
+     Compiling windows_x86_64_msvc v0.48.5
+     Compiling serde v1.0.228
+     Compiling windows-link v0.2.0
+     Compiling once_cell v1.21.3
+     Compiling log v0.4.28
+     Compiling crossbeam-utils v0.8.21
+     Compiling smallvec v1.15.1
+     Compiling powerfmt v0.2.0
+     Compiling autocfg v1.5.0
+     Compiling time-core v0.1.6
+     Compiling str_indices v0.4.4
+     Compiling equivalent v1.0.2
+     Compiling thiserror v1.0.69
+     Compiling num-conv v0.1.0
+     Compiling itoa v1.0.15
+     Compiling lazy_static v1.5.0
+     Compiling memchr v2.7.6
+     Compiling hashbrown v0.16.0
+     Compiling cfg-if v1.0.3
+     Compiling windows-sys v0.61.1
+     Compiling option-ext v0.2.0
+     Compiling sharded-slab v0.1.7
+     Compiling deranged v0.5.4
+     Compiling tracing-core v0.1.34
+     Compiling thread_local v1.1.9
+     Compiling winnow v0.7.13
+     Compiling toml_write v0.1.2
+     Compiling regex-syntax v0.8.6
+     Compiling pin-project-lite v0.2.16
+     Compiling either v1.15.0
+     Compiling ropey v1.6.1
+     Compiling lovely-lib v0.8.0 (C:\Dev\hades\hades-loader\Hell1Modding\build\_deps\lovely_lib-src\crates\lovely-lib)
+     Compiling crop v0.4.3
+     Compiling wildmatch v2.5.0
+     Compiling itertools v0.13.0
+     Compiling num-traits v0.2.19
+     Compiling regex-lite v0.1.7
+     Compiling tracing-log v0.2.0
+     Compiling indexmap v2.11.4
+     Compiling aho-corasick v1.1.3
+     Compiling winapi-util v0.1.11
+     Compiling time v0.3.44
+     Compiling windows-targets v0.52.6
+     Compiling same-file v1.0.6
+     Compiling crossbeam-channel v0.5.15
+     Compiling windows-targets v0.48.5
+     Compiling windows-sys v0.52.0
+     Compiling walkdir v2.5.0
+     Compiling windows-sys v0.48.0
+     Compiling syn v2.0.106
+     Compiling regex-automata v0.4.11
+     Compiling nu-ansi-term v0.50.1
+     Compiling chrono v0.4.42
+     Compiling tracing-subscriber v0.3.20
+     Compiling dirs-sys v0.4.1
+     Compiling dirs v5.0.1
+     Compiling serde_ignored v0.1.14
+     Compiling regex-cursor v0.1.5
+     Compiling serde_derive v1.0.228
+     Compiling thiserror-impl v1.0.69
+     Compiling tracing-attributes v0.1.30
+     Compiling tracing v0.1.41
+     Compiling tracing-appender v0.2.3
+     Compiling serde_spanned v0.6.9
+     Compiling toml_datetime v0.6.11
+     Compiling toml_edit v0.22.27
+     Compiling toml v0.8.23
+CUSTOMBUILD : warning : creating a shared reference to mutable static [C:\Dev\hades\hades-loader\Hell1Modding\build\_cargo-build_lovely_lib.vcxproj]
+     --> crates\lovely-lib\src\lib.rs:202:27
+      |
+  202 |     let patched: String = PATCH_TABLE.apply_patches(&name, buf_str);
+      |                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ shared reference to mutable static
+      |
+      = note: shared references to mutable statics are dangerous; it's undefined behavior if the static is mutated or if a mutable reference is created for it while the shared reference lives
+      = note: for more information, see <https://doc.rust-lang.org/edition-guide/rust-2024/static-mut-references.html>
+      = note: `#[warn(static_mut_refs)]` (part of `#[warn(rust_2024_compatibility)]`) on by default
+  

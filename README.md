@@ -117,15 +117,52 @@ script's definitions will not reach the game:
 ```lua
 rom.on_import.pre(function(script)
     if script ~= "RoomManager.lua" then return nil end
-    return setmetatable({}, {
-        __index    = rom.game,
-        __newindex = function(_, k, v) rom.game[k] = v end,
-    })
+    return setmetatable({}, { __index = rom.game, __newindex = rom.game })
 end)
 ```
 
+Use the **table** form of `__index` / `__newindex`, not a closure. A closure
+that writes `rom.game[k] = v` runs during the script's own compilation and
+raises `table index is nil`; pointing both metamethods straight at `rom.game`
+lets Lua do the redirect itself, with no intervening call.
+
 Note the game loads its scripts **twice** during startup, so `on_import`
 callbacks fire once per wave. Write them to be idempotent.
+
+### Patching the game's own scripts
+
+For changes that have to happen *inside* a game script rather than around it,
+ship a [lovely](https://github.com/ethangreen-dev/lovely-injector) patch file
+as `plugins/<Namespace>-<Mod>/lovely.toml`, or several under
+`plugins/<Namespace>-<Mod>/lovely/*.toml`. The script's text is rewritten on
+its way into the compiler; nothing is written to disk.
+
+```toml
+[manifest]
+version = "1.0.0"
+priority = 0
+
+[[patches]]
+[patches.pattern]
+target = "roommanager.lua"
+pattern = 'Import "Color.lua"'
+position = "after"
+payload = 'MyMod_Loaded = true'
+match_indent = false
+times = 1
+```
+
+`target` is the script's filename, lowercased — `RoomManager.lua` is
+`roommanager.lua`. Pattern, regex and copy patches are all supported; see
+lovely's own documentation for the full schema.
+
+Every patch file loaded, and every patch applied, is reported in
+`ReturnOfModding/lovely.log`. A patched script is also dumped to
+`ReturnOfModding/lovely_dump/` so you can read what the game actually
+compiled.
+
+Drop a `.lovelyignore` file in a mod's folder to skip its patches without
+uninstalling it.
 
 ---
 
@@ -212,7 +249,10 @@ If you'd like to integrate Hell1Modding into your mod manager, here are the spec
 
 ## Building
 
-Requires MSVC and CMake 3.24+. Dependencies are fetched by CMake.
+Requires MSVC, CMake 3.24+, and a [Rust toolchain](https://rustup.rs)
+with the `x86_64-pc-windows-msvc` target — lovely-lib is a Rust staticlib and
+is the one dependency that is not C or C++. Everything else is fetched by
+CMake.
 
 ```
 cmake -B build -A x64

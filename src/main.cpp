@@ -12,6 +12,7 @@
 #include "lua_extensions/bindings/hades/audio.hpp"
 #include "hades1/script_hook.hpp"
 #include "logger/exception_handler.hpp"
+#include "lovely/lovely.hpp"
 #include "version.hpp"
 #include "paths/paths.hpp"
 
@@ -63,6 +64,11 @@ static DWORD WINAPI late_init(LPVOID)
 
     LOGF(INFO, "Hell1Modding v{} ({} on {})", big::version::VERSION_NUMBER, big::version::GIT_SHA1, big::version::GIT_BRANCH);
     LOG(INFO) << "Root folder: " << reinterpret_cast<const char*>(root_folder.u8string().c_str());
+
+    // Before install_script_hook: the patch table has to be loaded before the
+    // luaL_loadbufferx hook that consumes it can fire. It scans the plugins
+    // folder, so it also has to come after g_file_manager.init.
+    lovely::init();
 
     // Addresses come from EngineWin64s.pdb by name, so a game update moves
     // them without breaking us. Takes about a second, which is why it is on

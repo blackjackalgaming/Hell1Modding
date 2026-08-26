@@ -11,10 +11,6 @@ set(SRC_DIR "${PROJECT_SOURCE_DIR}/src")
 # Modules
 #
 # Dropped from Hell2Modding's list, and why:
-#   lovely      - patches the text of the game's own Lua scripts before they
-#                 compile. 6 of 78 mods in a real profile ship lovely patches,
-#                 so this probably does need to come back - but it drags in a
-#                 Rust toolchain, so it is its own piece of work.
 #   tolk        - screen reader / accessibility. 0 of 78 mods use it.
 #   capstone    - disassembler, used only for Hades-2-specific instruction
 #                 rewriting we do not do. Genuinely not needed.
@@ -35,12 +31,17 @@ set(SRC_DIR "${PROJECT_SOURCE_DIR}/src")
 #   luasocket   - socket/mime/http/ltn12 for mods. No mod in a 78-mod profile
 #                 uses it today; added for API parity so a mod written against
 #                 Hell2Modding does not hit a missing library.
+#   lovely      - source-text patching of the game's own Lua scripts, applied
+#                 in the luaL_loadbufferx hook. 6 of 78 mods in a real profile
+#                 ship lovely patches, and without it those mods load, run,
+#                 and silently do nothing. Needs a Rust toolchain.
 # ---------------------------------------------------------------------------
 message(STATUS "\nFetching modules")
 include(cmake_scripts/git.cmake)
 include(cmake_scripts/eastl.cmake)
 include(cmake_scripts/lpeg.cmake)
 include(cmake_scripts/luasocket.cmake)
+include(cmake_scripts/lovely.cmake)
 include(cmake_scripts/raw_pdb.cmake)
 include(cmake_scripts/rom.cmake)
 include(cmake_scripts/safetyhook.cmake)
@@ -96,6 +97,7 @@ target_link_libraries(Hell1Modding
         dxguid
         EASTL
         lpeg_static
+        ${LOVELY_LIB}
         luasocket_static
         raw_pdb
         safetyhook

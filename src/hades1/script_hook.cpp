@@ -3,6 +3,7 @@
 #include "config_options.hpp"
 #include "game_pdb.hpp"
 #include "hades_lua.hpp"
+#include "lovely/lovely.hpp"
 #include "lua_extensions/lua_manager_extension.hpp"
 #include "script_hook.hpp"
 
@@ -21,7 +22,20 @@ namespace
 	SafetyHookInline g_load_hook{};
 	SafetyHookInline g_lua_close_hook{};
 	SafetyHookInline g_init_lua_hook{};
-	SafetyHookInline g_lua_pcallk_hook{};
+	SafetyHookInline g_loadbufferx_hook{};
+
+	// True only while this thread is inside our ScriptManager::Load detour.
+	//
+	// lua_pcallk is called constantly, from several threads, for things that
+	// have nothing to do with script loading - save deserialisation on a worker
+	// thread, for one. Applying a staged _ENV to any of those attaches it to the
+	// wrong function and corrupts the VM: observed as EXCEPTION_ACCESS_VIOLATION
+	// in luaH_set under luabins_load, on a WorkerManager task thread.
+	//
+	// The pcall we actually want is the one ScriptManager::Load makes itself,
+	// which is on this thread and inside this call. thread_local, not a plain
+	// bool, because script loading and that worker thread run concurrently.
+	thread_local bool g_in_script_load = false;
 
 	std::mutex g_task_mutex;
 	std::vector<std::function<void()>> g_tasks;
@@ -91,7 +105,9 @@ namespace
 
 		big::lua_manager_extension::fire_on_pre_import(path);
 
+		g_in_script_load  = true;
 		const bool result = g_load_hook.call<bool, const char*>(path);
+		g_in_script_load  = false;
 
 		big::lua_manager_extension::fire_on_post_import(path);
 
@@ -109,16 +125,39 @@ namespace
 	}
 
 	// ScriptManager::Load compiles a script with luaL_loadbufferx and then
-	// pcalls it. This is the moment the compiled chunk is on top of the stack,
-	// so it is the only point where an _ENV from on_import.pre can be attached
-	// to it. Staging without this hook does nothing at all.
+	// pcalls the resulting chunk. The chunk sits on top of the stack the moment
+	// loadbufferx returns, which is where an _ENV from on_import.pre gets
+	// attached. Staging without this does nothing at all.
 	//
-	// The engine pcalls constantly, so apply_staged_env early-outs when nothing
-	// is staged - which is almost always.
-	int lua_pcallk_detour(lua_State* L, int nargs, int nresults, int errfunc, int ctx, void* k)
+	// This used to hook lua_pcallk instead, which was a bad idea: the whole
+	// engine pcalls constantly, from several threads, so the hook sat in the
+	// path of everything. luaL_loadbufferx is called only to compile a script,
+	// which is exactly the scope we want.
+	//
+	// int luaL_loadbufferx(lua_State*, const char* buff, size_t sz,
+	//                      const char* name, const char* mode)
+	int loadbufferx_detour(lua_State* L, const char* buff, size_t size, const char* name, const char* mode)
 	{
-		big::lua_manager_extension::apply_staged_env(L);
-		return g_lua_pcallk_hook.call<int, lua_State*, int, int, int, int, void*>(L, nargs, nresults, errfunc, ctx, k);
+		// lovely rewrites the script's text before it is compiled. It owns the
+		// result for the duration of this call and nothing outlives it: Lua
+		// copies whatever it needs out of the buffer while compiling.
+		const big::lovely::patched_buffer patched(buff, size, name);
+
+		if (patched.was_patched())
+		{
+			LOGF(INFO, "lovely patched \"{}\" ({} -> {} bytes).", name ? name : "(null)", size, patched.size());
+		}
+
+		const int result = g_loadbufferx_hook.call<int, lua_State*, const char*, size_t, const char*, const char*>(L, patched.data(), patched.size(), name, mode);
+
+		// Only on a successful compile is there a chunk to attach to, and only
+		// while this thread is inside our Load detour is it the right chunk.
+		if (result == 0 && g_in_script_load)
+		{
+			big::lua_manager_extension::apply_staged_env(L);
+		}
+
+		return result;
 	}
 
 	// ScriptManager::InitLua builds the engine's Lua state. Some engine config
@@ -196,15 +235,15 @@ namespace big::hades1
 			LOG(INFO) << (g_load_hook ? "Hooked ScriptManager::Load." : "safetyhook refused ScriptManager::Load.");
 		}
 
-		if (const auto pcallk_addr = big::hades1::game_symbol("lua_pcallk"))
+		if (const auto loadbufferx_addr = big::hades1::game_symbol("luaL_loadbufferx"))
 		{
-			g_lua_pcallk_hook = safetyhook::create_inline(reinterpret_cast<void*>(pcallk_addr),
-			                                              reinterpret_cast<void*>(&lua_pcallk_detour));
-			LOG(INFO) << (g_lua_pcallk_hook ? "Hooked lua_pcallk for _ENV injection." : "safetyhook refused lua_pcallk.");
+			g_loadbufferx_hook = safetyhook::create_inline(reinterpret_cast<void*>(loadbufferx_addr),
+			                                              reinterpret_cast<void*>(&loadbufferx_detour));
+			LOG(INFO) << (g_loadbufferx_hook ? "Hooked luaL_loadbufferx for _ENV injection." : "safetyhook refused luaL_loadbufferx.");
 		}
 		else
 		{
-			LOG(WARNING) << "lua_pcallk not in the symbol map; on_import.pre _ENV injection will not work.";
+			LOG(WARNING) << "luaL_loadbufferx not in the symbol map; on_import.pre _ENV injection will not work.";
 		}
 
 		if (g_symbols.script_manager_init_lua)
