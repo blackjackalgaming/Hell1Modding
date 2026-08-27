@@ -66,7 +66,7 @@ namespace big
 				if (GetForegroundWindow() == console)
 				{
 					SetForegroundWindow(game_window);
-					LOG(INFO) << "Console had the foreground; handed it back to the game window.";
+					LOG(DEBUG) << "Console had the foreground; handed it back to the game window.";
 				}
 
 				return;

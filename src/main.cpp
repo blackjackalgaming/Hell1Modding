@@ -42,6 +42,22 @@ static DWORD WINAPI late_init(LPVOID)
     // Must precede the logger: logger::initialize() binds a "Console Enabled"
     // option off config::general, and that pointer is null until this runs.
     config::init_general();
+
+    // Bound before the logger on purpose. toml_v2's bind() returns any entry
+    // that already exists, so whoever binds first decides the default - and
+    // RoM's logger would otherwise start the console at
+    // "DEBUG, INFO, WARNING, ERROR", which means every symbol we resolve,
+    // every hook we install and several hundred lines of engine chatter.
+    //
+    // DEBUG still reaches the log file, which keeps its own full default.
+    // Anyone who has already chosen a value keeps it; this only changes what
+    // a fresh install starts with.
+    config::general->bind("Logging",
+                          "Console LogLevels",
+                          "INFO, WARNING, ERROR",
+                          "Only displays the specified log levels in the console. DEBUG carries the loader's own "
+                          "internals and the engine's own logging - add it when diagnosing a problem. The log file "
+                          "keeps everything regardless.");
     hades1::init_config_option_entries();
 
     // The overlay. Failure here is not fatal - the game just renders as it
@@ -63,7 +79,7 @@ static DWORD WINAPI late_init(LPVOID)
     const auto exception_handling = new exception_handler(true, nullptr);
 
     LOGF(INFO, "Hell1Modding v{} ({} on {})", big::version::VERSION_NUMBER, big::version::GIT_SHA1, big::version::GIT_BRANCH);
-    LOG(INFO) << "Root folder: " << reinterpret_cast<const char*>(root_folder.u8string().c_str());
+    LOG(DEBUG) << "Root folder: " << reinterpret_cast<const char*>(root_folder.u8string().c_str());
 
     // Before install_script_hook: the patch table has to be loaded before the
     // luaL_loadbufferx hook that consumes it can fire. It scans the plugins
@@ -80,14 +96,6 @@ static DWORD WINAPI late_init(LPVOID)
         hades1::install_script_hook();
         hades1::install_log_write_hook();
         lua::hades::audio::install_hooks();
-
-        // Proof the queue drains on the right thread. Replaced by mod loading
-        // in roadmap item 4.
-        hades1::run_on_script_thread(
-            []
-            {
-                LOGF(INFO, "Task ran on script thread {}.", GetCurrentThreadId());
-            });
     }
 
     // Last, because it blocks until the game window exists. Everything above

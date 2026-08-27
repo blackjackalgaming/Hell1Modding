@@ -49,7 +49,7 @@ namespace
 		if (!g_studio_system.load(std::memory_order_relaxed))
 		{
 			g_studio_system.store(studio_system, std::memory_order_relaxed);
-			LOGF(INFO, "FMOD Studio System captured at {}.", studio_system);
+			LOGF(DEBUG, "FMOD Studio System captured at {}.", studio_system);
 		}
 
 		return g_update_hook.call<int, void*>(studio_system);
@@ -145,7 +145,7 @@ namespace lua::hades::audio
 			return false;
 		}
 
-		LOG(INFO) << "Hooked FMOD Studio System::update to capture the audio system.";
+		LOG(DEBUG) << "Hooked FMOD Studio System::update to capture the audio system.";
 		return true;
 	}
 

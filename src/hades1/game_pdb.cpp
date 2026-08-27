@@ -148,7 +148,7 @@ namespace big::hades1
 		}
 
 		const auto engine_base = reinterpret_cast<uintptr_t>(engine_module);
-		LOG(INFO) << module_name << " base " << HEX_TO_UPPER(engine_base);
+		LOG(DEBUG) << module_name << " base " << HEX_TO_UPPER(engine_base);
 
 		const auto pdb_path        = paths::get_main_module_folder() / pdb_name;
 		const auto pdb_path_string = pdb_path.u8string();
@@ -194,7 +194,7 @@ namespace big::hades1
 		// Logged so that a game patch swapping the PDB is obvious in the log.
 		// CLAUDE.md records the GUID the hardcoded RVAs were taken from.
 		const auto h = info_stream.GetHeader();
-		LOGF(INFO,
+		LOGF(DEBUG,
 		     "{} age {}, GUID {:08X}-{:04X}-{:04X}-{:02X}{:02X}-{:02X}{:02X}{:02X}{:02X}{:02X}{:02X}",
 		     pdb_name,
 		     h->age,
@@ -371,7 +371,7 @@ namespace big::hades1
 			    });
 		}
 
-		LOGF(INFO,
+		LOGF(DEBUG,
 		     "Symbol map: {} symbols, {} with code sizes.",
 		     hades1_symbol_to_address.size(),
 		     hades1_symbol_to_code_size.size());
@@ -453,7 +453,7 @@ namespace big::hades1
 			const auto rva = address - engine_base;
 			if (rva == e.documented_rva)
 			{
-				LOGF(INFO, "Symbol [OK  ] {:#09X}  {}", rva, e.name);
+				LOGF(DEBUG, "Symbol [OK  ] {:#09X}  {}", rva, e.name);
 			}
 			else
 			{
@@ -497,6 +497,6 @@ namespace big::hades1
 			ofs << std::hex << std::uppercase << rva << " " << name << "\n";
 		}
 
-		LOGF(INFO, "Wrote {} symbols to symbols.txt", sorted.size());
+		LOGF(DEBUG, "Wrote {} symbols to symbols.txt", sorted.size());
 	}
 } // namespace big::hades1

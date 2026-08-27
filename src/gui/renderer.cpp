@@ -122,7 +122,7 @@ namespace
 		// looks cramped around the larger text.
 		ImGui::GetStyle().ScaleAllSizes(ui_scale);
 
-		LOGF(INFO, "Renderer: UI scale {:.2f} for a {}x{} back buffer.", ui_scale, desc.BufferDesc.Width, desc.BufferDesc.Height);
+		LOGF(DEBUG, "Renderer: UI scale {:.2f} for a {}x{} back buffer.", ui_scale, desc.BufferDesc.Width, desc.BufferDesc.Height);
 
 		ImGui_ImplWin32_Init(g_window);
 		ImGui_ImplDX11_Init(g_device, g_context);
@@ -131,7 +131,7 @@ namespace
 
 		g_imgui_ready = true;
 
-		LOGF(INFO, "Renderer: ImGui up on D3D11, window {}, ini at {}", static_cast<void*>(g_window), path);
+		LOGF(DEBUG, "Renderer: ImGui up on D3D11, window {}, ini at {}", static_cast<void*>(g_window), path);
 	}
 
 	// Shared by both present paths.
@@ -140,7 +140,7 @@ namespace
 		static std::atomic<int> calls{0};
 		if (calls.fetch_add(1) == 0)
 		{
-			LOGF(INFO, "Renderer: first present on swap chain {}", static_cast<void*>(swap_chain));
+			LOGF(DEBUG, "Renderer: first present on swap chain {}", static_cast<void*>(swap_chain));
 		}
 
 		if (!g_imgui_ready)
@@ -248,7 +248,7 @@ namespace
 				               swap_chain1->Release();
 			               }
 
-			               LOGF(INFO,
+			               LOGF(DEBUG,
 			                    "Renderer: captured swap chain {}; Present {}, Present1 {}.",
 			                    static_cast<void*>(swap_chain),
 			                    g_present_hook ? "hooked" : "no",
@@ -342,7 +342,7 @@ namespace big
 			return false;
 		}
 
-		LOGF(INFO,
+		LOGF(DEBUG,
 		     "Renderer: watching for the engine's swap chain (CreateSwapChain {}, CreateSwapChainForHwnd {}).",
 		     g_create_swapchain_hook ? "hooked" : "no",
 		     g_create_swapchain_for_hwnd_hook ? "hooked" : "no");

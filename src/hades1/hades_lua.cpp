@@ -140,7 +140,7 @@ namespace big::hades1
 		// which has long finished by the time we run.
 		G(game_state)->version = lua_version(nullptr);
 
-		LOGF(INFO,
+		LOGF(DEBUG,
 		     "Lua sentinels borrowed from the game: nilobject RVA {:#X}, dummynode RVA {:#X}",
 		     static_cast<uintptr_t>(luaO_nilobject_external_address) - engine_base,
 		     static_cast<uintptr_t>(dummynode_external_address) - engine_base);
@@ -182,7 +182,7 @@ namespace big::hades1
 			return;
 		}
 
-		LOGF(INFO, "Lua state {} is closing; tearing the manager down.", static_cast<void*>(g_last_state));
+		LOGF(DEBUG, "Lua state {} is closing; tearing the manager down.", static_cast<void*>(g_last_state));
 
 		g_is_lua_state_valid = false;
 		clear_staged_env();
@@ -246,7 +246,7 @@ namespace big::hades1
 
 		g_is_lua_state_valid = true;
 
-		LOGF(INFO,
+		LOGF(DEBUG,
 		     "Lua manager up on the game's state {}; {} module(s) loaded.",
 		     static_cast<void*>(game_state),
 		     g_lua_manager->get_module_count());

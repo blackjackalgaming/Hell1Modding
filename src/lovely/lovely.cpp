@@ -129,7 +129,7 @@ namespace big::lovely
 		// patch applied, with the mod that owns it.
 		if (result == lovely_patch_table_load_result::ok)
 		{
-			LOGF(INFO, "lovely initialised over {} - see lovely.log for per-patch detail.", g_plugins_path);
+			LOGF(DEBUG, "lovely initialised over {} - see lovely.log for per-patch detail.", g_plugins_path);
 		}
 		else
 		{

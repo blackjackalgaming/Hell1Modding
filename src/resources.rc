@@ -3,7 +3,7 @@
 // FILEVERSION / PRODUCTVERSION take four components. Hell2Modding's rc uses
 // three, which leaves VS_FIXEDFILEINFO malformed and makes Windows report no
 // version at all - the strings are in the binary but nothing reads them.
-// nightly.yml rewrites both lines, so keep the `FILEVERSION <a,b,c,d>` shape.
+// release.yml rewrites both lines, so keep the `FILEVERSION <a,b,c,d>` shape.
 
 1 VERSIONINFO
 FILEVERSION     	1,0,0,0

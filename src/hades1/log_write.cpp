@@ -18,10 +18,13 @@ namespace
 		switch (level)
 		{
 		case 2:  out_label = "DBG";  return DEBUG;
-		case 4:  out_label = "INFO"; return INFO;
+		// Engine INFO is pure chatter - asset reads, sampler descriptors, a few
+		// hundred lines a boot - so it lands at DEBUG and stays in the log file
+		// rather than the console. Engine warnings and errors keep their level.
+		case 4:  out_label = "INFO"; return DEBUG;
 		case 8:  out_label = "WARN"; return WARNING;
 		case 16: out_label = "ERR";  return ERROR;
-		default: out_label = "UNK";  return INFO;
+		default: out_label = "UNK";  return DEBUG;
 		}
 	}
 
@@ -94,6 +97,34 @@ namespace
 			return;
 		}
 
+		// The engine probes for optional files it does not ship and logs every
+		// miss at ERROR: weapons the profile has not unlocked
+		// (FistWeapon.pkg_manifest, GunWeapon.pkg_manifest), the per-machine
+		// config override named after the hostname, optional UI .sjson
+		// overrides. 15 of the 18 ERROR lines in a clean boot are this, and on
+		// a healthy install every one of them is normal - so they would train
+		// a user to ignore the console entirely.
+		//
+		// They stay in the log file at DEBUG, and the first one is reported so
+		// the behaviour is discoverable rather than silently swallowed. Only
+		// this exact shape is demoted: a *read* that failed because the file
+		// is not there. Anything else the engine calls an error stays one.
+		if (level == 16 && formatted.starts_with("Error opening file:") && formatted.contains(" -- rb ")
+		    && formatted.contains("No such file or directory"))
+		{
+			static bool reported = false;
+			if (!reported)
+			{
+				reported = true;
+				LOG(WARNING) << "The engine probes for optional files that do not exist and logs each miss as an "
+				                "error. These are normal; they are recorded in LogOutput.log at DEBUG level and "
+				                "kept off the console from here on.";
+			}
+
+			LOG(DEBUG) << "[game/ERR] [" << basename_of(filename) << ":" << line_number << "] " << formatted;
+			return;
+		}
+
 		// Script errors are always surfaced - they are the whole reason this
 		// hook exists. Everything else honours the config toggle.
 		const bool is_script_error = formatted.starts_with("Script er");
@@ -105,7 +136,44 @@ namespace
 		const char* label       = nullptr;
 		const al::eLogLevel lvl = map_level(level, label);
 
-		LOG(lvl) << "[game/" << label << "] [" << basename_of(filename) << ":" << line_number << "] " << formatted;
+		// Collapse runs of the identical message, the way syslog does.
+		//
+		// The engine repeats itself in bursts when something is unhappy:
+		// "bink.cpp:1719 Task overrun: ZagreusIdle_Bink" arrived 102 times in
+		// 2.2 seconds, one per dropped decode. Every line said the same thing,
+		// and 102 of them buries anything else on the console.
+		//
+		// Nothing is hidden - the count is reported as soon as a different
+		// message shows up, so the burst is still visible and still countable,
+		// it just occupies two lines instead of a hundred. Deliberately
+		// consecutive-only: two messages alternating are both worth seeing.
+		{
+			static std::mutex mutex;
+			static std::string last;
+			static al::eLogLevel last_level = INFO;
+			static size_t repeats           = 0;
+
+			std::string line = std::format("[game/{}] [{}:{}] {}", label, basename_of(filename), line_number, formatted);
+
+			std::scoped_lock lock(mutex);
+
+			if (line == last)
+			{
+				++repeats;
+				return;
+			}
+
+			if (repeats)
+			{
+				LOG(last_level) << "  (previous message repeated " << repeats << " more time" << (repeats == 1 ? "" : "s") << ")";
+				repeats = 0;
+			}
+
+			last       = line;
+			last_level = lvl;
+
+			LOG(lvl) << line;
+		}
 	}
 } // namespace
 
@@ -135,7 +203,7 @@ namespace big::hades1
 			return false;
 		}
 
-		LOG(INFO) << "Hooked Log::Write; mirroring the game's log.";
+		LOG(DEBUG) << "Hooked Log::Write; mirroring the game's log.";
 		return true;
 	}
 } // namespace big::hades1
