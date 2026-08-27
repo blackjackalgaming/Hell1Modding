@@ -5,6 +5,7 @@
 #include "hades_lua.hpp"
 #include "lovely/lovely.hpp"
 #include "lua_extensions/lua_manager_extension.hpp"
+#include "save_ignores.hpp"
 #include "script_hook.hpp"
 
 #include <safetyhook.hpp>
@@ -24,7 +25,13 @@ namespace
 	SafetyHookInline g_init_lua_hook{};
 	SafetyHookInline g_loadbufferx_hook{};
 
-	// True only while this thread is inside our ScriptManager::Load detour.
+	// How deep this thread is inside our ScriptManager::Load detour.
+	//
+	// A depth counter rather than a bool because Load nests: a Hades 1 script
+	// Imports others, and each Import is a recursive Load inside the outer
+	// one. As a bool, the first nested Import cleared the flag on the way out
+	// and every compile after it in the same wave was treated as if it had
+	// nothing to do with script loading.
 	//
 	// lua_pcallk is called constantly, from several threads, for things that
 	// have nothing to do with script loading - save deserialisation on a worker
@@ -35,7 +42,7 @@ namespace
 	// The pcall we actually want is the one ScriptManager::Load makes itself,
 	// which is on this thread and inside this call. thread_local, not a plain
 	// bool, because script loading and that worker thread run concurrently.
-	thread_local bool g_in_script_load = false;
+	thread_local int g_script_load_depth = 0;
 
 	std::mutex g_task_mutex;
 	std::vector<std::function<void()>> g_tasks;
@@ -105,13 +112,28 @@ namespace
 
 		big::lua_manager_extension::fire_on_pre_import(path);
 
-		g_in_script_load  = true;
+		++g_script_load_depth;
 		const bool result = g_load_hook.call<bool, const char*>(path);
-		g_in_script_load  = false;
+		--g_script_load_depth;
 
 		big::lua_manager_extension::fire_on_post_import(path);
 
-		LOGF(DEBUG, "Load(\"{}\") -> {}", path ? path : "(null)", result);
+		// Main.lua defines SaveIgnores, and the game's Save() serialises every
+		// global that is not in it. The loader's own "rom" table is full of
+		// sol2 functions and usertypes, so without this the first save after
+		// a room transition dies with "unsupported type detected". Done here
+		// rather than at RoomManager.lua because this is the earliest point
+		// SaveIgnores exists, and re-done every wave because the state is
+		// rebuilt each time.
+		if (path && !strcmp(path, "Main.lua"))
+		{
+			big::hades1::register_loader_save_ignores();
+		}
+
+		// The one piece of engine activity worth showing a mod user: it is how
+		// you see which script a mod's on_import callback is reacting to, and it
+		// is the equivalent of Hell2Modding's "Game loading lua script".
+		LOGF(INFO, "Load(\"{}\")", path ? path : "(null)");
 
 		if (has_crashed && *has_crashed && !crashed_before)
 		{
@@ -152,7 +174,7 @@ namespace
 
 		// Only on a successful compile is there a chunk to attach to, and only
 		// while this thread is inside our Load detour is it the right chunk.
-		if (result == 0 && g_in_script_load)
+		if (result == 0 && g_script_load_depth > 0)
 		{
 			big::lua_manager_extension::apply_staged_env(L);
 		}
@@ -190,7 +212,7 @@ namespace
 		if (first_call)
 		{
 			first_call = false;
-			LOGF(INFO, "First ScriptManager::Update on thread {}. Lua is live from here on.", GetCurrentThreadId());
+			LOGF(DEBUG, "First ScriptManager::Update on thread {}. Lua is live from here on.", GetCurrentThreadId());
 
 			// Fallback only. If a wave somehow went by without Main.lua we
 			// still come up, rather than leaving mods unloaded entirely.
@@ -232,14 +254,14 @@ namespace big::hades1
 		{
 			g_load_hook = safetyhook::create_inline(reinterpret_cast<void*>(g_symbols.script_manager_load),
 			                                        reinterpret_cast<void*>(&load_detour));
-			LOG(INFO) << (g_load_hook ? "Hooked ScriptManager::Load." : "safetyhook refused ScriptManager::Load.");
+			LOG(DEBUG) << (g_load_hook ? "Hooked ScriptManager::Load." : "safetyhook refused ScriptManager::Load.");
 		}
 
 		if (const auto loadbufferx_addr = big::hades1::game_symbol("luaL_loadbufferx"))
 		{
 			g_loadbufferx_hook = safetyhook::create_inline(reinterpret_cast<void*>(loadbufferx_addr),
 			                                              reinterpret_cast<void*>(&loadbufferx_detour));
-			LOG(INFO) << (g_loadbufferx_hook ? "Hooked luaL_loadbufferx for _ENV injection." : "safetyhook refused luaL_loadbufferx.");
+			LOG(DEBUG) << (g_loadbufferx_hook ? "Hooked luaL_loadbufferx for _ENV injection." : "safetyhook refused luaL_loadbufferx.");
 		}
 		else
 		{
@@ -250,21 +272,21 @@ namespace big::hades1
 		{
 			g_init_lua_hook = safetyhook::create_inline(reinterpret_cast<void*>(g_symbols.script_manager_init_lua),
 			                                            reinterpret_cast<void*>(&init_lua_detour));
-			LOG(INFO) << (g_init_lua_hook ? "Hooked ScriptManager::InitLua." : "safetyhook refused ScriptManager::InitLua.");
+			LOG(DEBUG) << (g_init_lua_hook ? "Hooked ScriptManager::InitLua." : "safetyhook refused ScriptManager::InitLua.");
 		}
 
 		if (const auto lua_close_addr = big::hades1::game_symbol("lua_close"))
 		{
 			g_lua_close_hook = safetyhook::create_inline(reinterpret_cast<void*>(lua_close_addr),
 			                                             reinterpret_cast<void*>(&lua_close_detour));
-			LOG(INFO) << (g_lua_close_hook ? "Hooked lua_close." : "safetyhook refused lua_close.");
+			LOG(DEBUG) << (g_lua_close_hook ? "Hooked lua_close." : "safetyhook refused lua_close.");
 		}
 		else
 		{
 			LOG(WARNING) << "lua_close not in the symbol map; manager teardown will be unsafe.";
 		}
 
-		LOG(INFO) << "Hooked ScriptManager::Update.";
+		LOG(DEBUG) << "Hooked ScriptManager::Update.";
 		return true;
 	}
 

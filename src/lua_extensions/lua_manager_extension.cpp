@@ -4,6 +4,7 @@
 #include "bindings/luasocket/luasocket.hpp"
 #include "bindings/hades/audio.hpp"
 #include "bindings/paths_ext.hpp"
+#include "bindings/tolk/tolk.hpp"
 #include "lua_manager_extension.hpp"
 #include "lua_module_ext.hpp"
 
@@ -53,7 +54,20 @@ namespace big::lua_manager_extension
 			return;
 		}
 
-		sol::set_environment(g_env_to_add.value(), sol::stack_reference(L, -1));
+		// **Consume it.** An environment is staged for exactly one script and
+		// belongs to exactly one compile - the first luaL_loadbufferx after
+		// on_import.pre, which is the script Load was called for.
+		//
+		// Leaving it staged leaked it into nested imports. A Hades 1 script
+		// Imports others, and each Import is a recursive ScriptManager::Load
+		// inside the outer one, so RoomManager.lua's environment was also
+		// attached to Color.lua - the first script it imports - and that
+		// nested import's fire_on_post_import then cleared the staging, so
+		// every script after it silently got none. Both halves wrong.
+		const sol::environment env = std::move(g_env_to_add.value());
+		g_env_to_add.reset();
+
+		sol::set_environment(env, sol::stack_reference(L, -1));
 	}
 
 	void init_lua_api(sol::state_view& state, sol::table& lua_ext)
@@ -134,7 +148,7 @@ namespace big::lua_manager_extension
 
 				luaL_requiref(state.lua_state(), lib.name, lib.opener, 1);
 				lua_pop(state.lua_state(), 1);
-				LOGF(INFO, "Opened missing standard library: {}", lib.name);
+				LOGF(DEBUG, "Opened missing standard library: {}", lib.name);
 			}
 		}
 
@@ -152,6 +166,10 @@ namespace big::lua_manager_extension
 
 		// audio.load_bank - custom FMOD banks, via FMOD Studio's public API.
 		lua::hades::audio::bind(lua_ext);
+
+		// tolk.output / tolk.silence - screen reader output. The driver is not
+		// loaded until a mod calls one of them.
+		lua::tolk::bind(lua_ext);
 	}
 
 	sol::environment make_module_env(sol::state_view& state)
@@ -208,7 +226,10 @@ namespace big::lua_manager_extension
 	{
 		std::scoped_lock lock(g_manager_mutex);
 
-		// Whatever _ENV was staged applied to the script that just finished.
+		// Safety net only: apply_staged_env consumes the environment at the
+		// compile it belongs to. This catches the case where no compile
+		// happened at all - a script already in LOADED_SCRIPT_FILES returns
+		// false from Load without ever being read.
 		g_env_to_add.reset();
 
 		if (!is_lua_state_valid() || !script_file)
