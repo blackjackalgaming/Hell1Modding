@@ -9,9 +9,8 @@ namespace big
 		static const char* GIT_COMMIT_SUBJECT;
 		static const char* GIT_BRANCH;
 
-		// Nightly CI rewrites this line, deriving the value from the current
-		// published Thunderstore version and bumping the patch. Keep the
-		// `VERSION_NUMBER = "x.y.z"` shape or the sed in nightly.yml misses.
-		static inline const char* VERSION_NUMBER = "1.0.0";
+		// .github/workflows/release.yml rewrites this line from the git tag.
+		// Keep the `VERSION_NUMBER = "x.y.z"` shape or the sed misses.
+		static inline const char* VERSION_NUMBER = "0.3.0";
 	};
 }
