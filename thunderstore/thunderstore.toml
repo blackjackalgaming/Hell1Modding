@@ -1,0 +1,39 @@
+# Thunderstore package definition, built and published by
+# .github/workflows/release.yml via tcli.
+#
+# NOTE: this cannot be published yet. Thunderstore has no Hades 1 community,
+# so `communities` below is a placeholder and tcli will reject it until the
+# real slug is known. The workflow overrides it from the repository variable
+# THUNDERSTORE_COMMUNITY and skips the publish step entirely when that is
+# unset, so nothing here breaks the build in the meantime.
+
+# [config]
+# schemaVersion = "0.0.1"
+
+# [package]
+# namespace = "Hell1Modding"
+# name = "Hell1Modding"
+# versionNumber = "0.3.0"
+# description = "Lua mod loader for Hades 1. Loads mods from memory - nothing in the game folder is rewritten."
+# websiteUrl = "https://github.com/blackjackalgaming/Hell1Modding"
+# containsNsfwContent = false
+
+# [package.dependencies]
+
+# [build]
+# icon = "./icon.png"
+# readme = "../README.md"
+# outdir = "./build"
+
+# The ReturnOfModdingPack/ prefix is what marks this as a ReturnOfModding-family
+# loader rather than an ordinary mod - r2modman installs the payload into the
+# game folder instead of into plugins/. Hell2Modding ships d3d12.dll here
+# because Hades 2 is DirectX 12; Hades 1 is DirectX 11, so ours is d3d11.dll.
+# [[build.copy]]
+# source = "../dist/d3d11.dll"
+# target = "./ReturnOfModdingPack/d3d11.dll"
+
+# [publish]
+# repository = "https://thunderstore.io"
+# communities = ["REPLACE-WITH-HADES-1-COMMUNITY"]
+# categories = ["libraries"]

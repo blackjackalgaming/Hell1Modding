@@ -30,6 +30,9 @@ jobs:
     runs-on: windows-latest
     name: Build
 
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -157,3 +160,63 @@ jobs:
             `d3d11.pdb` is optional. Put it next to `d3d11.dll` if you are reporting a
             crash - without it the loader's own frames in a crash log are bare addresses
             instead of function names.
+
+  # Dormant until Thunderstore opens a Hades 1 community.
+  #
+  # Skipped unless BOTH are configured, so it costs nothing and cannot fail the
+  # release while we wait:
+  #   - repository variable THUNDERSTORE_COMMUNITY  (the community slug)
+  #   - repository secret   TCLI_AUTH_TOKEN         (a Thunderstore service key)
+  #
+  # Publishes as-is; Thunderstore has no draft state, so review the GitHub
+  # draft release first and only then let this run.
+  publish-thunderstore:
+    runs-on: ubuntu-latest
+    name: Publish to Thunderstore
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Check whether publishing is configured
+        id: gate
+        env:
+          TOKEN: ${{ secrets.TCLI_AUTH_TOKEN }}
+          COMMUNITY: ${{ vars.THUNDERSTORE_COMMUNITY }}
+        shell: bash
+        run: |
+          if [ -n "$TOKEN" ] && [ -n "$COMMUNITY" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "Skipping: THUNDERSTORE_COMMUNITY and/or TCLI_AUTH_TOKEN are not set."
+            echo "There is no Hades 1 community on Thunderstore yet, so this is expected."
+          fi
+
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.ready == 'true'
+
+      - name: Download the built DLL
+        if: steps.gate.outputs.ready == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: Hell1Modding-${{ needs.build.outputs.version }}
+          path: dist
+
+      - name: Install tcli
+        if: steps.gate.outputs.ready == 'true'
+        run: dotnet tool install --global tcli
+
+      - name: Stamp version and community
+        if: steps.gate.outputs.ready == 'true'
+        shell: bash
+        run: |
+          cd thunderstore
+          sed -i 's/versionNumber = "[^"]*"/versionNumber = "${{ needs.build.outputs.version }}"/' thunderstore.toml
+          sed -i 's/communities = \[.*\]/communities = ["${{ vars.THUNDERSTORE_COMMUNITY }}"]/' thunderstore.toml
+          cat thunderstore.toml
+
+      - name: Publish
+        if: steps.gate.outputs.ready == 'true'
+        run: |
+          cd thunderstore
+          tcli publish --token ${{ secrets.TCLI_AUTH_TOKEN }}

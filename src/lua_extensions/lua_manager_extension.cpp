@@ -1,5 +1,6 @@
 #include "common.hpp"
 
+#include "config/config.hpp"
 #include "bindings/lpeg.hpp"
 #include "bindings/luasocket/luasocket.hpp"
 #include "bindings/hades/audio.hpp"
@@ -16,6 +17,163 @@ extern "C"
 
 namespace
 {
+	// Functions that let a mod run arbitrary native code. Everything here is
+	// reachable only because *we* opened the library - Hades 1 ships without
+	// io, os and package, so a plugin that calls os.execute is calling into
+	// something the loader handed it.
+	//
+	// File access is deliberately not blocked. Mods legitimately read and
+	// write their own data; io.open and os.remove are part of doing that. The
+	// line is drawn at executing code, not at touching disk.
+	struct sandbox_entry
+	{
+		const char* table;
+		const char* field;
+	};
+
+	constexpr sandbox_entry g_blocked_functions[] = {
+	    {"os",      "execute"}, // run a shell command
+	    {"io",      "popen"  }, // run a shell command and read its output
+	    {"package", "loadlib"}, // load any DLL and call any export in it
+	};
+
+	toml_v2::config_file::config_entry<std::string>* g_sandbox_allowlist = nullptr;
+
+	// Which mod is calling, from the chunk name Lua recorded for it.
+	//
+	// Module sources look like "@...\plugins\Author-Name\main.lua", so the
+	// path segment after "plugins" is the mod's GUID - the same string shown
+	// in the overlay and used in manifests.
+	std::string calling_mod_guid(lua_State* L)
+	{
+		lua_Debug ar{};
+		if (!lua_getstack(L, 1, &ar) || !lua_getinfo(L, "S", &ar) || !ar.source)
+		{
+			return {};
+		}
+
+		std::string_view source(ar.source);
+
+		size_t at = source.find("plugins\\");
+		size_t skip = 8;
+		if (at == std::string_view::npos)
+		{
+			at = source.find("plugins/");
+		}
+
+		if (at == std::string_view::npos)
+		{
+			return {};
+		}
+
+		source.remove_prefix(at + skip);
+
+		const size_t end = source.find_first_of("\/");
+		return std::string(end == std::string_view::npos ? source : source.substr(0, end));
+	}
+
+	bool is_mod_allowed(const std::string& guid)
+	{
+		if (guid.empty() || !g_sandbox_allowlist)
+		{
+			return false;
+		}
+
+		// Comma-separated GUIDs, whitespace ignored.
+		const std::string list = g_sandbox_allowlist->get_value();
+		size_t start           = 0;
+
+		while (start <= list.size())
+		{
+			const size_t comma = list.find(',', start);
+			const size_t stop  = (comma == std::string::npos) ? list.size() : comma;
+
+			auto entry = std::string_view(list).substr(start, stop - start);
+			while (!entry.empty() && std::isspace(static_cast<unsigned char>(entry.front())))
+			{
+				entry.remove_prefix(1);
+			}
+			while (!entry.empty() && std::isspace(static_cast<unsigned char>(entry.back())))
+			{
+				entry.remove_suffix(1);
+			}
+
+			if (!entry.empty() && entry == guid)
+			{
+				return true;
+			}
+
+			if (comma == std::string::npos)
+			{
+				break;
+			}
+
+			start = comma + 1;
+		}
+
+		return false;
+	}
+
+	// Upvalue 1: the name, for the error message. Upvalue 2: the original.
+	int blocked_lua_function(lua_State* L)
+	{
+		const char* name  = lua_tostring(L, lua_upvalueindex(1));
+		const std::string guid = calling_mod_guid(L);
+
+		if (is_mod_allowed(guid))
+		{
+			const int nargs = lua_gettop(L);
+			lua_pushvalue(L, lua_upvalueindex(2));
+			lua_insert(L, 1);
+			lua_call(L, nargs, LUA_MULTRET);
+			return lua_gettop(L);
+		}
+
+		LOGF(WARNING,
+		     "{} tried to call {}(), which is blocked. Add it to \"Allow Unsafe Lua For\" in the config if this is "
+		     "deliberate and you trust the mod.",
+		     guid.empty() ? "A script" : guid,
+		     name);
+
+		return luaL_error(L, "%s() is disabled by Hell1Modding. See the log.", name);
+	}
+
+	void sandbox_lua_state(lua_State* L)
+	{
+		g_sandbox_allowlist =
+		    big::config::general->bind("Security",
+		                               "Allow Unsafe Lua For",
+		                               std::string(""),
+		                               "Comma-separated mod GUIDs (Author-ModName) permitted to call os.execute, "
+		                               "io.popen and package.loadlib. Those run arbitrary programs and load "
+		                               "arbitrary DLLs, so they are blocked for every mod by default. Only add a "
+		                               "mod here if you trust it and know why it needs them.");
+
+		for (const auto& entry : g_blocked_functions)
+		{
+			lua_getglobal(L, entry.table);
+			if (!lua_istable(L, -1))
+			{
+				lua_pop(L, 1);
+				continue;
+			}
+
+			lua_getfield(L, -1, entry.field);
+			if (!lua_isfunction(L, -1))
+			{
+				// Already absent, or already wrapped by a previous wave.
+				lua_pop(L, 2);
+				continue;
+			}
+
+			lua_pushfstring(L, "%s.%s", entry.table, entry.field);
+			lua_pushvalue(L, -2);                       // the original
+			lua_pushcclosure(L, blocked_lua_function, 2);
+			lua_setfield(L, -3, entry.field);
+			lua_pop(L, 2);                              // original + table
+		}
+	}
+
 	// Set by an on_import.pre callback that wants to own the _ENV of the script
 	// currently being loaded. Consumed by the Load hook, cleared on post.
 	sol::optional<sol::environment> g_env_to_add;
@@ -151,6 +309,10 @@ namespace big::lua_manager_extension
 				LOGF(DEBUG, "Opened missing standard library: {}", lib.name);
 			}
 		}
+
+		// Straight after the libraries are opened, and before any mod runs.
+		// These are only reachable because we opened them in the first place.
+		sandbox_lua_state(state.lua_state());
 
 		// require("lpeg") - SGG_Modding-SJSON hard-requires it, and most of the
 		// mod ecosystem depends on SJSON.
