@@ -2,5 +2,6 @@ build/
 .vs/
 out/
 *.user
-build.log
 .code-workspace
+*.log
+src/version.cpp

@@ -39,6 +39,13 @@ Hell1Modding, along with ENVY, Chalk, ReLoad, SJSON and DemonDaemon.
 Only the **`x64` (DirectX 11)** build is supported. `x64Vk` and `x86` each need
 their own proxy and are untested.
 
+> **If you launch the Vulkan build, the loader silently does not run.**
+> Hades 1 picks its renderer by which executable you start, not by a launch
+> option — `x64\Hades.exe` is DirectX 11, `x64Vk\Hades.exe` is Vulkan. The
+> Vulkan engine never imports `d3d11.dll`, so the proxy is never loaded: no
+> mods, no log, no error. (There is no DirectX 12 build; `-dx12` as a Steam
+> launch option does nothing here.)
+
 To uninstall, delete `d3d11.dll`. Nothing else is modified.
 
 ---
@@ -56,6 +63,14 @@ If the file isn't there, it will appear once you've launched the game at least o
 The same file also controls the overlay scale, whether the log console is shown, and which log levels reach the console and the log file.
 
 While the interface is open the player is frozen the same way the game's own menus freeze it — you cannot move or attack, but the world keeps running.
+
+> **ImGui callbacks registered by mods are disabled by default.**
+> `gui.add_imgui`, `gui.add_always_draw_imgui` and `gui.add_to_menu_bar` run
+> mod Lua on the render thread, and Hades 1 presents from a Forge worker
+> thread while the game is running its own Lua elsewhere. Driving one
+> `lua_State` from both corrupts it and crashes shortly into gameplay. Set
+> `Mod Lua Gui Callbacks = true` under `[GUI]` only if you are developing
+> against that API and understand the risk.
 
 ## Creating mods
 
@@ -92,6 +107,7 @@ available.
 | `rom.paths` | `config`, `plugins`, `plugins_data`, `Content`, `Ship` |
 | `rom.path` | path helpers, including `combine` |
 | `rom.audio.load_bank(path)` | load a custom FMOD `.bank` |
+| `rom.tolk` | screen reader output — `output`, `silence`, `detect_screen_reader`, `is_loaded` |
 
 The standard Lua libraries are all present, including `require`, `package`,
 `io` and `os` — the loader opens any the game leaves out. `lpeg` and the
@@ -128,6 +144,53 @@ lets Lua do the redirect itself, with no intervening call.
 
 Note the game loads its scripts **twice** during startup, so `on_import`
 callbacks fire once per wave. Write them to be idempotent.
+
+### Globals and saving
+
+Hades 1 saves the game by walking `_G` and serialising **everything that is not
+listed in `SaveIgnores`**. The type filter only applies at the top level, so a
+table survives it and the serialiser then recurses into the whole thing. One
+function or userdata anywhere inside kills the save with
+
+```
+Script Crash: Main.lua:1035 unsupported type detected
+```
+
+Most mods never hit this, because ENVY gives each mod its own `_ENV` and
+ModUtil works through a proxy — neither writes to the real `_G`. But if your
+mod deliberately publishes a global that holds functions, register it once the
+game has defined `SaveIgnores`:
+
+```lua
+rom.on_import.post(function(script)
+    if script == "Main.lua" then
+        rom.game.SaveIgnores.MyModGlobal = true
+    end
+end)
+```
+
+The loader does exactly this for `rom` itself, and ModUtil does it for mods
+registered through it. This is the same mechanism Supergiant use for
+`package`, `io`, `os` and the other standard libraries.
+
+Note that Hades 2 saves by *whitelist* instead, so a mod ported from there
+will not have needed this.
+
+### `modfile.txt` load order
+
+`SGG_Modding-DemonDaemon` reads a mod's `modfile.txt` at runtime, which is how
+the old ModImporter format still works — `Top Import` runs before the target
+script, `Import` after it, and nothing is written to disk.
+
+**Set the target explicitly:**
+
+```
+To "Scripts/Main.lua"
+```
+
+The default target is `RoomLogic.lua`, which is Hades 2's name for it. A mod
+that omits the `To` line queues its imports against a script that never loads
+in Hades 1, so the mod appears to load fine and then does nothing at all.
 
 ### Patching the game's own scripts
 
