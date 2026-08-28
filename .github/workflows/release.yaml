@@ -65,7 +65,7 @@ jobs:
           else
             # No tag on a branch push. Use a dev version plus the short sha so
             # artifacts from different commits are distinguishable.
-            version="0.1.0-dev+$(git rev-parse --short HEAD)"
+            version="0.3.0-dev+$(git rev-parse --short HEAD)"
           fi
 
           echo "version=$version" >> "$GITHUB_OUTPUT"
