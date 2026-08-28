@@ -31,7 +31,7 @@ on:
       version:
         description: "Version for that release, without the leading v (e.g. 0.1.0)"
         required: false
-        default: "0.1.0"
+        default: "0.3.0"
 
 # A newer push to the same branch makes an in-flight run pointless.
 concurrency:
