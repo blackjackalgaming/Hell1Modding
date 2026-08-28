@@ -115,12 +115,39 @@ namespace
 	}
 
 	// Upvalue 1: the name, for the error message. Upvalue 2: the original.
+	//
+	// **Nothing with a destructor may be alive across the tail of this
+	// function.** Neither `luaL_error` nor `lua_call` returns normally: the
+	// game's Lua is compiled as C, so both longjmp straight past this frame.
+	// A live std::string is leaked at best, and at worst the longjmp crosses a
+	// frame MSVC has registered C++ cleanup for, which crashes the process.
+	//
+	// That is exactly what an earlier version of this function did, and it
+	// took the game down the moment any mod touched a blocked call. It is also
+	// why Hell2Modding's equivalent only ever holds a `const char*` - the C
+	// style is load-bearing here, not incidental.
 	int blocked_lua_function(lua_State* L)
 	{
-		const char* name  = lua_tostring(L, lua_upvalueindex(1));
-		const std::string guid = calling_mod_guid(L);
+		const char* name = lua_tostring(L, lua_upvalueindex(1));
 
-		if (is_mod_allowed(guid))
+		bool allowed = false;
+
+		// Scoped so every std::string is destroyed before we leave.
+		{
+			const std::string guid = calling_mod_guid(L);
+			allowed                = is_mod_allowed(guid);
+
+			if (!allowed)
+			{
+				LOGF(WARNING,
+				     "{} tried to call {}(), which is blocked. Add it to \"Allow Unsafe Lua For\" in the config if "
+				     "this is deliberate and you trust the mod.",
+				     guid.empty() ? std::string("A script") : guid,
+				     name);
+			}
+		}
+
+		if (allowed)
 		{
 			const int nargs = lua_gettop(L);
 			lua_pushvalue(L, lua_upvalueindex(2));
@@ -129,13 +156,22 @@ namespace
 			return lua_gettop(L);
 		}
 
-		LOGF(WARNING,
-		     "{} tried to call {}(), which is blocked. Add it to \"Allow Unsafe Lua For\" in the config if this is "
-		     "deliberate and you trust the mod.",
-		     guid.empty() ? "A script" : guid,
-		     name);
-
-		return luaL_error(L, "%s() is disabled by Hell1Modding. See the log.", name);
+		// **Return a failure; do not raise one.**
+		//
+		// luaL_error resolves to our statically linked Lua, whose luaD_throw
+		// longjmps - and on x64 a longjmp is a real stack unwind
+		// (RtlUnwindEx). Unwinding out of this C++ frame kills the process in
+		// __report_gsfailure; measured, twice, the moment any mod touched a
+		// blocked call.
+		//
+		// Nothing is lost by not raising. os.execute, io.popen and
+		// package.loadlib all report failure as `nil, message` in ordinary Lua,
+		// so a mod that checks the result sees a normal failure and one that
+		// does not sees nil - neither can take the game down, which is the
+		// right property for a security control to have.
+		lua_pushnil(L);
+		lua_pushfstring(L, "%s() is disabled by Hell1Modding. See LogOutput.log.", name);
+		return 2;
 	}
 
 	void sandbox_lua_state(lua_State* L)
