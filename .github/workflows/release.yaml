@@ -55,6 +55,13 @@ jobs:
           # Full history so git.cmake can stamp the sha and branch once it is
           # added back to the build. Harmless until then.
           fetch-depth: 0
+          ref: ${{ github.event.inputs.version }}
+
+      - name: Display inputs
+        run: | 
+          echo "Version: $VERSION"
+        env:
+          VERSION: ${{ inputs.version }}
 
       - name: Work out the version
         id: version
