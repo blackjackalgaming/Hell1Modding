@@ -29,7 +29,7 @@ on:
         required: false
         default: false
       version:
-        description: "Version for that release, without the leading v (e.g. 0.1.0)"
+        description: "0.3.0"
         required: true
         type: string
 
