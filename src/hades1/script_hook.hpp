@@ -19,4 +19,11 @@ namespace big::hades1
 	// Safe to call before the hook is installed - tasks queue up and run on the
 	// first Update. Tasks run once, in the order queued.
 	void run_on_script_thread(std::function<void()> task);
+
+	// Ask the engine to load a script, bypassing our detour.
+	//
+	// The path is what ScriptManager::Load expects: a filename rooted at
+	// Content/Scripts, so "../Mods/Foo/bar.lua" reaches a legacy mod. Only
+	// safe from the script thread - in practice, from inside the Load hook.
+	bool load_game_script(const char* path);
 } // namespace big::hades1

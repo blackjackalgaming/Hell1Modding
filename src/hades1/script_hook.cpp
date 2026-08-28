@@ -3,6 +3,7 @@
 #include "config_options.hpp"
 #include "game_pdb.hpp"
 #include "hades_lua.hpp"
+#include "legacy_mods.hpp"
 #include "lovely/lovely.hpp"
 #include "lua_extensions/lua_manager_extension.hpp"
 #include "save_ignores.hpp"
@@ -105,6 +106,10 @@ namespace
 		if (path && !strcmp(path, "Main.lua"))
 		{
 			big::hades1::init_lua_manager_for_game_state();
+
+			// Re-read Content/Mods each wave, for the same reason the manager
+			// is rebuilt: the state is new and nothing survives from the last.
+			big::hades1::scan_legacy_mods();
 		}
 
 		const auto has_crashed = reinterpret_cast<bool*>(big::hades1::g_symbols.has_crashed);
@@ -112,11 +117,16 @@ namespace
 
 		big::lua_manager_extension::fire_on_pre_import(path);
 
+		// After the plugins, so a legacy mod can rely on anything ModUtil and
+		// friends set up during their own pre-import pass.
+		big::hades1::fire_legacy_imports(path, true);
+
 		++g_script_load_depth;
 		const bool result = g_load_hook.call<bool, const char*>(path);
 		--g_script_load_depth;
 
 		big::lua_manager_extension::fire_on_post_import(path);
+		big::hades1::fire_legacy_imports(path, false);
 
 		// Main.lua defines SaveIgnores, and the game's Save() serialises every
 		// global that is not in it. The loader's own "rom" table is full of
@@ -288,6 +298,19 @@ namespace big::hades1
 
 		LOG(DEBUG) << "Hooked ScriptManager::Update.";
 		return true;
+	}
+
+	bool load_game_script(const char* path)
+	{
+		if (!g_load_hook || !path)
+		{
+			return false;
+		}
+
+		// The original, not the detour: these imports are the loader's own
+		// doing, so firing on_import for them would report them as if the game
+		// had asked for them.
+		return g_load_hook.call<bool, const char*>(path);
 	}
 
 	void run_on_script_thread(std::function<void()> task)

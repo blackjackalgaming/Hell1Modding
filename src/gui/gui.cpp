@@ -4,6 +4,7 @@
 #include "file_manager/file_manager.hpp"
 #include "gui.hpp"
 #include "hades1/hades_lua.hpp"
+#include "hades1/legacy_mods.hpp"
 #include "hades1/script_hook.hpp"
 #include "lua/lua_manager.hpp"
 #include "lua_extensions/lua_manager_extension.hpp"
@@ -33,6 +34,7 @@ namespace
 	toml_v2::config_file::config_entry<int>* g_toggle_key = nullptr;
 	toml_v2::config_file::config_entry<bool>* g_mod_gui_callbacks = nullptr;
 	toml_v2::config_file::config_entry<bool>* g_onboarding_shown  = nullptr;
+	toml_v2::config_file::config_entry<bool>* g_developer_mode   = nullptr;
 
 	// Non-null while the user is picking a new key for that entry.
 	toml_v2::config_file::config_entry_base* g_rebinding = nullptr;
@@ -229,7 +231,31 @@ namespace
 	// config_entry_base stores its value in a std::any, so the type switch is
 	// on type(). Anything unrecognised is shown read-only rather than silently
 	// skipped - a mod using a type we do not handle should still be visible.
-	void draw_config_entry(toml_v2::config_file* file, toml_v2::config_file::config_entry_base* entry)
+	// Settings that can break a game or weaken a safety control. They stay in
+	// the .cfg with their full description - findable by anyone who goes
+	// looking - but are kept out of the overlay so a normal player cannot flip
+	// one by curiosity while clicking through settings.
+	bool is_developer_setting(const std::string& section, const std::string& key)
+	{
+		static const std::pair<const char*, const char*> hidden[] = {
+		    {"Security", "Allow Unsafe Lua For"        }, // lets a mod run programs / load DLLs
+		    {"GUI",      "Mod Lua Gui Callbacks"       }, // known to corrupt the Lua state
+		    {"Engine",   "Suppress Script Error Asserts"}, // lets the game run on past a fault
+		};
+
+		for (const auto& [s, k] : hidden)
+		{
+			if (section == s && key == k)
+			{
+				return true;
+			}
+		}
+
+		return false;
+	}
+
+	void draw_config_entry(
+toml_v2::config_file* file, toml_v2::config_file::config_entry_base* entry)
 	{
 		const auto& key   = entry->m_definition.m_key;
 		const auto& type  = entry->type();
@@ -377,6 +403,7 @@ namespace
 		// m_entries is keyed by config_definition, which sorts by section then
 		// key, so walking it in order groups sections naturally.
 		std::string current_section;
+		size_t hidden_count = 0;
 
 		for (auto& [definition, entry] : file->m_entries)
 		{
@@ -386,7 +413,19 @@ namespace
 				ImGui::SeparatorText(current_section.c_str());
 			}
 
+			if (is_developer_setting(definition.m_section, definition.m_key)
+			    && (!g_developer_mode || !g_developer_mode->get_value()))
+			{
+				++hidden_count;
+				continue;
+			}
+
 			draw_config_entry(file, entry.get());
+		}
+
+		if (hidden_count)
+		{
+			ImGui::TextDisabled("%zu developer setting(s) hidden. Enable Developer Mode to show them.", hidden_count);
 		}
 
 		ImGui::Unindent();
@@ -518,6 +557,58 @@ namespace
 
 			ImGui::TextWrapped("Usually a missing dependency. LogOutput.log names it: look for \"Can't load ... because it's missing ...\".");
 		}
+
+		// ModImporter-style mods from Content/Mods. They are not RoM modules,
+		// so nothing above knows about them, and without this a user with only
+		// legacy mods installed sees a Mods tab that looks empty.
+		const auto legacy = big::hades1::get_legacy_mods();
+		if (!legacy.empty())
+		{
+			ImGui::Spacing();
+			ImGui::SeparatorText("Content/Mods (ModImporter style)");
+
+			if (ImGui::BeginTable("legacy", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_Borders | ImGuiTableFlags_SizingStretchProp))
+			{
+				ImGui::TableSetupColumn("Mod");
+				ImGui::TableSetupColumn("Priority");
+				ImGui::TableSetupColumn("Imports");
+				ImGui::TableHeadersRow();
+
+				for (const auto& mod : legacy)
+				{
+					ImGui::TableNextRow();
+					ImGui::TableNextColumn();
+
+					if (mod.missing)
+					{
+						ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%s", mod.name.c_str());
+					}
+					else
+					{
+						ImGui::TextUnformatted(mod.name.c_str());
+					}
+
+					ImGui::TableNextColumn();
+					ImGui::Text("%d", mod.priority);
+
+					ImGui::TableNextColumn();
+					if (mod.missing)
+					{
+						ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "%zu (%zu missing)", mod.imports, mod.missing);
+					}
+					else
+					{
+						ImGui::Text("%zu", mod.imports);
+					}
+				}
+
+				ImGui::EndTable();
+			}
+
+			ImGui::TextDisabled("Loaded in priority order, lowest first, after every plugin.");
+		}
+
+		ImGui::Spacing();
 
 		if (ImGui::Button("Open mods folder"))
 		{
@@ -750,6 +841,13 @@ namespace big::gui
 		                                           false,
 		                                           "Set once the first-run welcome window has been dismissed. "
 		                                           "Set it back to false to see it again.");
+
+		g_developer_mode = config::general->bind("Developer",
+		                                         "Developer Mode",
+		                                         false,
+		                                         "Show developer settings in the overlay. These are the ones that "
+		                                         "can break the game or weaken a safety control, so they are hidden "
+		                                         "by default. They are always present in this file regardless.");
 
 		g_mod_gui_callbacks = config::general->bind("GUI",
 		                                            "Mod Lua Gui Callbacks",

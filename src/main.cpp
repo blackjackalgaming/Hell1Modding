@@ -8,6 +8,7 @@
 #include "gui/gui.hpp"
 #include "gui/renderer.hpp"
 #include "hades1/game_pdb.hpp"
+#include "hades1/file_redirect.hpp"
 #include "hades1/log_write.hpp"
 #include "lua_extensions/bindings/hades/audio.hpp"
 #include "hades1/script_hook.hpp"
@@ -92,8 +93,10 @@ static DWORD WINAPI late_init(LPVOID)
     if (hades1::read_game_pdb())
     {
         hades1::resolve_known_symbols();
+
         hades1::apply_config_options();
         hades1::install_script_hook();
+        hades1::install_file_redirect_hook();
         hades1::install_log_write_hook();
         lua::hades::audio::install_hooks();
     }

@@ -72,6 +72,36 @@ While the interface is open the player is frozen the same way the game's own men
 > `Mod Lua Gui Callbacks = true` under `[GUI]` only if you are developing
 > against that API and understand the risk.
 
+## Using existing (ModImporter) mods
+
+Mods written for **ModImporter** work as-is. Put the mod folder in
+
+```
+<game>\Content\Mods\<ModName>\
+```
+
+exactly as you always have — its `modfile.txt` is read at startup and its
+imports run at the same points ModImporter inserted them. **Nothing is written
+to disk**: the game's own scripts are never modified, so there is no install
+step, no backups to restore, and uninstalling is deleting the folder.
+
+Mods load in `Load Priority` order, lowest first, after every plugin — so
+ModUtil and anything else in `plugins/` is fully set up before a legacy mod
+runs.
+
+Two limits worth knowing:
+
+- **`SJSON` directives are not applied yet.** A mod that merges into the game's
+  `.sjson` data will load its Lua and log a warning about the part that was
+  skipped.
+- **Legacy mods share the game's globals.** Two mods that overwrite the same
+  global still conflict, exactly as they did under ModImporter. Mods that go
+  through ModUtil compose properly; that is what ModUtil is for.
+
+Check the Mods tab in the overlay to see which were found, their priority, and
+whether any reference a file that is missing. `Load Content Mods Folder` under
+`[Mods]` in the config turns the whole thing off.
+
 ## Creating mods
 
 - Define a `main.lua` file in which to code your mod.
