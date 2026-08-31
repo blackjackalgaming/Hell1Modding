@@ -29,7 +29,7 @@ on:
         required: false
         default: false
       version:
-        description: "0.3.0"
+        description: "0.4.0"
         required: true
         type: string
 
