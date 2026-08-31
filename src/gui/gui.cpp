@@ -4,6 +4,7 @@
 #include "file_manager/file_manager.hpp"
 #include "gui.hpp"
 #include "hades1/hades_lua.hpp"
+#include "hades1/legacy_config.hpp"
 #include "hades1/legacy_mods.hpp"
 #include "hades1/script_hook.hpp"
 #include "lua/lua_manager.hpp"
@@ -640,6 +641,14 @@ toml_v2::config_file* file, toml_v2::config_file::config_entry_base* entry)
 			{
 				draw_config_file(mod->guid().c_str(), file.get());
 			}
+		}
+
+		// Content/Mods mods, whose .cfg the loader generates on their behalf.
+		// They are not lua_modules, so they own no m_config_files and would
+		// otherwise never appear here despite the file existing on disk.
+		for (const auto& legacy : big::hades1::legacy_config_files())
+		{
+			draw_config_file(legacy.mod_name.c_str(), legacy.file.get());
 		}
 	}
 

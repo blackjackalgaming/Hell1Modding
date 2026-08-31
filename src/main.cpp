@@ -10,6 +10,7 @@
 #include "hades1/game_pdb.hpp"
 #include "hades1/file_redirect.hpp"
 #include "hades1/log_write.hpp"
+#include "hades1/plugin_data_files.hpp"
 #include "lua_extensions/bindings/hades/audio.hpp"
 #include "hades1/script_hook.hpp"
 #include "logger/exception_handler.hpp"
@@ -97,6 +98,10 @@ static DWORD WINAPI late_init(LPVOID)
         hades1::apply_config_options();
         hades1::install_script_hook();
         hades1::install_file_redirect_hook();
+
+        // After the redirect hook, whose table it fills.
+        hades1::scan_plugin_data_files();
+        hades1::install_asset_enumeration_probe();
         hades1::install_log_write_hook();
         lua::hades::audio::install_hooks();
     }
