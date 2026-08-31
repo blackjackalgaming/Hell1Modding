@@ -9,14 +9,14 @@
 --
 --- Path to their own folder inside `plugins`: Location of .lua, README, manifest.json files.
 --
---You can access other mods helpers through the `mods[OTHER_MOD_GUID]` table.
+--You can access other mods helpers through the `rom.mods[OTHER_MOD_GUID]` table.
 --
 --**Example Usage:**
 --
 --```lua
 --print(_ENV._PLUGIN.guid)
 --
---for n in pairs(mods[_ENV._PLUGIN.guid]) do
+--for n in pairs(rom.mods[_ENV._PLUGIN.guid]) do
 --     log.info(n)
 --end
 --```

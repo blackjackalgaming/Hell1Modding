@@ -128,6 +128,16 @@ extern "C" __declspec(dllexport) void my_main()
     // Three string assignments, no I/O. Safe under the loader lock, and
     // paths::init_dump_file_path() reads g_project_name, so it has to have
     // happened before the thread gets that far.
+    //
+    // The annotation below is read by the Lua doc generator, not by the
+    // compiler. Without it lua_api_namespace stays empty and every generated
+    // page is named and titled without its prefix - "pointer" rather than
+    // "rom.pointer" - which is wrong in the docs and wrong in the LuaLS
+    // definitions mods use for completion. The third argument is the same
+    // namespace at runtime.
+
+    // Lua API: Namespace
+    // Name: rom
     rom::init("Hell1Modding", "Hades.exe", "rom");
 
     // Everything else off the loader lock.
