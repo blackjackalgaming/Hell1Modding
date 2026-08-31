@@ -27,27 +27,62 @@ namespace big::hades1
 {
 	namespace
 	{
-		std::unique_ptr<toml_v2::config_file> g_current;
+		// Kept alive for the life of the process, not just long enough to write
+		// the file: the overlay reads these every frame, and the game rebuilds
+		// its Lua state twice a boot. A config_file holds only toml, no
+		// registry refs, so it survives a wave boundary untouched - which also
+		// means re-binding into the same one on the next wave is idempotent.
+		std::vector<legacy_config_file> g_legacy_files;
+		toml_v2::config_file* g_current = nullptr;
 		std::set<std::string> g_globals_before;
 
-		// Every string key of _G, read through the C API.
+		toml_v2::config_file* file_for(const std::string& mod_name, const std::filesystem::path& path)
+		{
+			for (auto& existing : g_legacy_files)
+			{
+				if (existing.mod_name == mod_name)
+				{
+					return existing.file.get();
+				}
+			}
+
+			auto file = std::make_unique<toml_v2::config_file>(reinterpret_cast<const char*>(path.u8string().c_str()),
+			                                                   true,
+			                                                   mod_name);
+			auto* raw = file.get();
+
+			g_legacy_files.push_back({mod_name, std::move(file)});
+			std::sort(g_legacy_files.begin(),
+			          g_legacy_files.end(),
+			          [](const auto& a, const auto& b)
+			          {
+				          return a.mod_name < b.mod_name;
+			          });
+
+			return raw;
+		}
+
+		// Every string key of _G, gathered by running `pairs` as a Lua chunk.
 		//
-		// sol2's range-for over state.globals() yields a single entry here -
-		// measured as "1 globals snapshotted, 1 now" against a state holding
-		// hundreds. Lookup through sol2 is fine, so only iteration is avoided;
-		// lua_next is the documented traversal and has no such ambiguity.
-		// Every string key of _G, gathered by the *game's* VM.
+		// This is not a workaround for anything on our side - it is the only
+		// correct way to read _G once ModUtil is loaded. ModUtil replaces the
+		// global table with a proxy: one real entry behind a metatable whose
+		// __index and __pairs do the actual work. Raw traversal therefore reports
+		// exactly one key, and it is right to. Measured, with the full mod stack
+		// up:
 		//
-		// Table traversal from our side does not work on this state. Both
-		// sol2's range-for and a hand-written lua_next loop return exactly one
-		// key against a _G holding hundreds - our luaH_next walking a table the
-		// game's copy of Lua allocated, which is the same class of problem as
-		// the luaO_nilobject and dummynode sentinels.
+		//   _G has 1 key via our lua_next, 1 via the game's lua_next,
+		//          1 via sol2, 3001 via pairs in the game's VM
 		//
-		// Running `pairs` as a Lua chunk avoids it completely: the chunk
-		// executes on the game's VM using the game's pairs and its own
-		// traversal, and hands back a single string. Reading one string across
-		// the boundary is safe in a way that iterating a table is not.
+		// Note the game's own lua_next agrees at 1, which is what rules out the
+		// two-Lua-copies explanation this comment used to give: it blamed our
+		// luaH_next walking a game-allocated table, in the same class as the
+		// luaO_nilobject and dummynode sentinels. That was wrong. Both copies
+		// behave identically and both are obeying the language - only `pairs`
+		// honours __pairs.
+		//
+		// Consequence for anything else that wants to sweep _G: doing it through
+		// the C API will silently see one key. Run a chunk instead.
 		std::set<std::string> global_keys(lua_State* L)
 		{
 			std::set<std::string> keys;
@@ -233,7 +268,7 @@ namespace big::hades1
 
 		const auto path = g_file_manager.get_project_folder("config").get_path() / (mod_name + ".cfg");
 
-		g_current = std::make_unique<toml_v2::config_file>(reinterpret_cast<const char*>(path.u8string().c_str()), true, mod_name);
+		g_current = file_for(mod_name, path);
 
 		size_t bound = 0;
 		bind_table(config, "config", 0, bound);
@@ -244,6 +279,11 @@ namespace big::hades1
 			LOGF(INFO, "Content/Mods: {} config -> config/{}.cfg ({} setting(s))", mod_name, mod_name, bound);
 		}
 
-		g_current.reset();
+		g_current = nullptr;
+	}
+
+	const std::vector<legacy_config_file>& legacy_config_files()
+	{
+		return g_legacy_files;
 	}
 }

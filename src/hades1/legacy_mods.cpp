@@ -3,6 +3,7 @@
 #include "config/config.hpp"
 #include "file_redirect.hpp"
 #include "legacy_config.hpp"
+#include "legacy_packages.hpp"
 #include "legacy_mods.hpp"
 #include "lua_extensions/bindings/paths_ext.hpp"
 #include "script_hook.hpp"
@@ -513,6 +514,9 @@ namespace big::hades1
 
 		// Replace and SJSON are answered when the engine opens the file, so
 		// they are registered now rather than fired at a script boundary.
+		// Packages are the exception - see legacy_packages.hpp.
+		begin_package_install();
+
 		for (const auto& mod : g_legacy_mods)
 		{
 			for (const auto& file : mod.files)
@@ -538,9 +542,21 @@ namespace big::hades1
 					continue;
 				}
 
+				// A package that is genuinely new has to exist on disk for the
+				// engine's boot-time enumeration to find it. install_package
+				// returns false for anything it does not handle - including a
+				// mod replacing one of the game's own packages, which stays on
+				// the non-destructive redirect path.
+				if (install_package(file.target, file.source, mod.name))
+				{
+					continue;
+				}
+
 				add_file_redirect(file.target, file.source, mod.name);
 			}
 		}
+
+		finish_package_install();
 
 		for (const auto& mod : g_legacy_mods)
 		{
